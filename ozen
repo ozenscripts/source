@@ -1,0 +1,873 @@
+import discord
+from discord.ext import commands
+import json
+import os
+import random
+import time
+import asyncio
+
+# =========================================================
+# sᴘᴇᴇᴅᴏ CONFIG
+# =========================================================
+
+TOKEN = "PUT_YOUR_NEW_BOT_TOKEN_HERE"
+
+# Put YOUR Discord user ID here
+OWNER_ID = 123456789012345678
+
+PREFIX = "sp!"
+ACCESS_FILE = "speedo_access.json"
+
+# =========================================================
+# BOT SETUP
+# =========================================================
+
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True
+
+bot = commands.Bot(
+    command_prefix=PREFIX,
+    intents=intents,
+    help_command=None
+)
+
+START_TIME = time.time()
+
+
+# =========================================================
+# ACCESS SYSTEM
+# =========================================================
+
+def load_access():
+    if not os.path.exists(ACCESS_FILE):
+        return []
+
+    try:
+        with open(ACCESS_FILE, "r") as file:
+            return json.load(file)
+    except:
+        return []
+
+
+def save_access():
+    with open(ACCESS_FILE, "w") as file:
+        json.dump(granted_users, file, indent=4)
+
+
+granted_users = load_access()
+
+
+def has_access(member):
+    if member.id == OWNER_ID:
+        return True
+
+    if member.id in granted_users:
+        return True
+
+    return member.guild_permissions.administrator
+
+
+async def access_check(ctx):
+    if not has_access(ctx.author):
+        await ctx.send(
+            "❌ You need the **Administrator** permission to use sᴘᴇᴇᴅᴏ."
+        )
+        return False
+
+    return True
+
+
+# =========================================================
+# READY
+# =========================================================
+
+@bot.event
+async def on_ready():
+    print("=" * 40)
+    print("⚡ sᴘᴇᴇᴅᴏ IS ONLINE")
+    print(f"Prefix: {PREFIX}")
+    print(f"Bot: {bot.user}")
+    print(f"Servers: {len(bot.guilds)}")
+    print("=" * 40)
+
+
+# =========================================================
+# ERROR HANDLER
+# =========================================================
+
+@bot.event
+async def on_command_error(ctx, error):
+
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(
+            f"❌ Missing argument.\nUse `{PREFIX}help` to see commands."
+        )
+        return
+
+    if isinstance(error, commands.MemberNotFound):
+        await ctx.send("❌ I couldn't find that member.")
+        return
+
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ You don't have permission to do that.")
+        return
+
+    print(f"Command error: {error}")
+
+
+# =========================================================
+# 1. HELP
+# =========================================================
+
+@bot.command()
+async def help(ctx):
+    if not await access_check(ctx):
+        return
+
+    embed = discord.Embed(
+        title="⚡ sᴘᴇᴇᴅᴏ",
+        description="Powerful Discord management bot",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="🛡️ Moderation",
+        value=(
+            "`sp!kick` `sp!ban` `sp!unban`\n"
+            "`sp!mute` `sp!unmute` `sp!timeout`\n"
+            "`sp!purge` `sp!warn` `sp!lock`\n"
+            "`sp!unlock` `sp!slowmode`"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="⚙️ Server",
+        value=(
+            "`sp!serverinfo` `sp!userinfo`\n"
+            "`sp!role` `sp!removerole`\n"
+            "`sp!createrole` `sp!deleterole`\n"
+            "`sp!announce` `sp!poll`"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎮 Fun",
+        value=(
+            "`sp!8ball` `sp!coinflip` `sp!roll`\n"
+            "`sp!joke` `sp!fact` `sp!quote`\n"
+            "`sp!rate` `sp!choose` `sp!randomnumber`"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="👑 Owner",
+        value="`sp!grantaccess @user`",
+        inline=False
+    )
+
+    embed.set_footer(text="sᴘᴇᴇᴅᴏ • Prefix: sp!")
+
+    await ctx.send(embed=embed)
+
+
+# =========================================================
+# 2. GRANT ACCESS
+# =========================================================
+
+@bot.command()
+async def grantaccess(ctx, member: discord.Member):
+    if ctx.author.id != OWNER_ID:
+        await ctx.send(
+            "❌ Only the **sᴘᴇᴇᴅᴏ bot owner** can use this command."
+        )
+        return
+
+    if member.id not in granted_users:
+        granted_users.append(member.id)
+        save_access()
+
+    await ctx.send(
+        f"👑 {member.mention} now has access to **all sᴘᴇᴇᴅᴏ commands**."
+    )
+
+
+# =========================================================
+# 3. REVOKE ACCESS
+# =========================================================
+
+@bot.command()
+async def revokeaccess(ctx, member: discord.Member):
+    if ctx.author.id != OWNER_ID:
+        await ctx.send(
+            "❌ Only the bot owner can use this command."
+        )
+        return
+
+    if member.id in granted_users:
+        granted_users.remove(member.id)
+        save_access()
+
+        await ctx.send(
+            f"🔒 Removed sᴘᴇᴇᴅᴏ access from {member.mention}."
+        )
+    else:
+        await ctx.send("❌ That user doesn't have granted access.")
+
+
+# =========================================================
+# 4. PING
+# =========================================================
+
+@bot.command()
+async def ping(ctx):
+    if not await access_check(ctx):
+        return
+
+    await ctx.send(
+        f"🏓 Pong! `{round(bot.latency * 1000)}ms`"
+    )
+
+
+# =========================================================
+# 5. BOTINFO
+# =========================================================
+
+@bot.command()
+async def botinfo(ctx):
+    if not await access_check(ctx):
+        return
+
+    uptime = int(time.time() - START_TIME)
+
+    await ctx.send(
+        f"⚡ **sᴘᴇᴇᴅᴏ**\n"
+        f"Servers: `{len(bot.guilds)}`\n"
+        f"Latency: `{round(bot.latency * 1000)}ms`\n"
+        f"Uptime: `{uptime}s`"
+    )
+
+
+# =========================================================
+# 6. SERVERINFO
+# =========================================================
+
+@bot.command()
+async def serverinfo(ctx):
+    if not await access_check(ctx):
+        return
+
+    guild = ctx.guild
+
+    embed = discord.Embed(
+        title=f"⚡ {guild.name}",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="👥 Members",
+        value=guild.member_count
+    )
+
+    embed.add_field(
+        name="📢 Channels",
+        value=len(guild.channels)
+    )
+
+    embed.add_field(
+        name="🎭 Roles",
+        value=len(guild.roles)
+    )
+
+    embed.add_field(
+        name="🆔 ID",
+        value=guild.id
+    )
+
+    await ctx.send(embed=embed)
+
+
+# =========================================================
+# 7. USERINFO
+# =========================================================
+
+@bot.command()
+async def userinfo(ctx, member: discord.Member = None):
+    if not await access_check(ctx):
+        return
+
+    member = member or ctx.author
+
+    embed = discord.Embed(
+        title=f"👤 {member}",
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="ID",
+        value=member.id
+    )
+
+    embed.add_field(
+        name="Bot",
+        value="Yes" if member.bot else "No"
+    )
+
+    embed.add_field(
+        name="Joined",
+        value=member.joined_at.strftime("%Y-%m-%d")
+        if member.joined_at else "Unknown"
+    )
+
+    embed.set_thumbnail(url=member.display_avatar.url)
+
+    await ctx.send(embed=embed)
+
+
+# =========================================================
+# 8. AVATAR
+# =========================================================
+
+@bot.command()
+async def avatar(ctx, member: discord.Member = None):
+    if not await access_check(ctx):
+        return
+
+    member = member or ctx.author
+
+    embed = discord.Embed(
+        title=f"🖼️ {member.display_name}'s Avatar"
+    )
+
+    embed.set_image(url=member.display_avatar.url)
+
+    await ctx.send(embed=embed)
+
+
+# =========================================================
+# 9. KICK
+# =========================================================
+
+@bot.command()
+async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
+    if not await access_check(ctx):
+        return
+
+    await member.kick(reason=reason)
+
+    await ctx.send(
+        f"👢 {member.mention} was kicked.\n"
+        f"Reason: `{reason}`"
+    )
+
+
+# =========================================================
+# 10. BAN
+# =========================================================
+
+@bot.command()
+async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
+    if not await access_check(ctx):
+        return
+
+    await member.ban(reason=reason)
+
+    await ctx.send(
+        f"🔨 {member.mention} was banned.\n"
+        f"Reason: `{reason}`"
+    )
+
+
+# =========================================================
+# 11. UNBAN
+# =========================================================
+
+@bot.command()
+async def unban(ctx, user_id: int):
+    if not await access_check(ctx):
+        return
+
+    try:
+        user = await bot.fetch_user(user_id)
+        await ctx.guild.unban(user)
+
+        await ctx.send(
+            f"✅ Unbanned **{user}**."
+        )
+
+    except discord.NotFound:
+        await ctx.send("❌ User isn't banned or couldn't be found.")
+
+
+# =========================================================
+# 12. TIMEOUT
+# =========================================================
+
+@bot.command()
+async def timeout(ctx, member: discord.Member, minutes: int):
+    if not await access_check(ctx):
+        return
+
+    if minutes < 1 or minutes > 40320:
+        await ctx.send(
+            "❌ Timeout must be between 1 and 40320 minutes."
+        )
+        return
+
+    duration = discord.utils.utcnow() + discord.timedelta(
+        minutes=minutes
+    )
+
+    await member.timeout(
+        duration - discord.utils.utcnow(),
+        reason="sᴘᴇᴇᴅᴏ timeout"
+    )
+
+    await ctx.send(
+        f"⏱️ {member.mention} timed out for `{minutes}` minutes."
+    )
+
+
+# =========================================================
+# 13. UNTIMEOUT
+# =========================================================
+
+@bot.command()
+async def untimeout(ctx, member: discord.Member):
+    if not await access_check(ctx):
+        return
+
+    await member.timeout(None)
+
+    await ctx.send(
+        f"✅ Removed timeout from {member.mention}."
+    )
+
+
+# =========================================================
+# 14. PURGE
+# =========================================================
+
+@bot.command()
+async def purge(ctx, amount: int):
+    if not await access_check(ctx):
+        return
+
+    if amount < 1 or amount > 100:
+        await ctx.send("❌ Amount must be between 1 and 100.")
+        return
+
+    deleted = await ctx.channel.purge(limit=amount)
+
+    msg = await ctx.send(
+        f"🧹 Deleted `{len(deleted)}` messages."
+    )
+
+    await asyncio.sleep(3)
+
+    try:
+        await msg.delete()
+    except:
+        pass
+
+
+# =========================================================
+# 15. SAY
+# =========================================================
+
+@bot.command()
+async def say(ctx, *, message):
+    if not await access_check(ctx):
+        return
+
+    await ctx.send(message)
+
+
+# =========================================================
+# 16. EMBED
+# =========================================================
+
+@bot.command()
+async def embed(ctx, title, *, message):
+    if not await access_check(ctx):
+        return
+
+    embed = discord.Embed(
+        title=title,
+        description=message,
+        color=discord.Color.blurple()
+    )
+
+    await ctx.send(embed=embed)
+
+
+# =========================================================
+# 17. ANNOUNCE
+# =========================================================
+
+@bot.command()
+async def announce(ctx, *, message):
+    if not await access_check(ctx):
+        return
+
+    embed = discord.Embed(
+        title="📢 ANNOUNCEMENT",
+        description=message,
+        color=discord.Color.gold()
+    )
+
+    embed.set_footer(text="sᴘᴇᴇᴅᴏ")
+
+    await ctx.send("@everyone", embed=embed)
+
+
+# =========================================================
+# 18. WARN
+# =========================================================
+
+warnings = {}
+
+
+@bot.command()
+async def warn(ctx, member: discord.Member, *, reason="No reason provided"):
+    if not await access_check(ctx):
+        return
+
+    if member.id not in warnings:
+        warnings[member.id] = []
+
+    warnings[member.id].append(reason)
+
+    await ctx.send(
+        f"⚠️ {member.mention} has been warned.\n"
+        f"Reason: `{reason}`\n"
+        f"Warnings: `{len(warnings[member.id])}`"
+    )
+
+
+# =========================================================
+# 19. WARNINGS
+# =========================================================
+
+@bot.command()
+async def warningslist(ctx, member: discord.Member):
+    if not await access_check(ctx):
+        return
+
+    user_warnings = warnings.get(member.id, [])
+
+    if not user_warnings:
+        await ctx.send(
+            f"✅ {member.mention} has no warnings."
+        )
+        return
+
+    text = "\n".join(
+        f"`{i + 1}.` {reason}"
+        for i, reason in enumerate(user_warnings)
+    )
+
+    await ctx.send(
+        f"⚠️ **Warnings for {member.mention}**\n{text}"
+    )
+
+
+# =========================================================
+# 20. CLEARWARNINGS
+# =========================================================
+
+@bot.command()
+async def clearwarnings(ctx, member: discord.Member):
+    if not await access_check(ctx):
+        return
+
+    warnings.pop(member.id, None)
+
+    await ctx.send(
+        f"✅ Cleared warnings for {member.mention}."
+    )
+
+
+# =========================================================
+# 21. LOCK
+# =========================================================
+
+@bot.command()
+async def lock(ctx):
+    if not await access_check(ctx):
+        return
+
+    overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+    overwrite.send_messages = False
+
+    await ctx.channel.set_permissions(
+        ctx.guild.default_role,
+        overwrite=overwrite
+    )
+
+    await ctx.send("🔒 Channel locked.")
+
+
+# =========================================================
+# 22. UNLOCK
+# =========================================================
+
+@bot.command()
+async def unlock(ctx):
+    if not await access_check(ctx):
+        return
+
+    overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+    overwrite.send_messages = None
+
+    await ctx.channel.set_permissions(
+        ctx.guild.default_role,
+        overwrite=overwrite
+    )
+
+    await ctx.send("🔓 Channel unlocked.")
+
+
+# =========================================================
+# 23. SLOWMODE
+# =========================================================
+
+@bot.command()
+async def slowmode(ctx, seconds: int):
+    if not await access_check(ctx):
+        return
+
+    if seconds < 0 or seconds > 21600:
+        await ctx.send(
+            "❌ Slowmode must be between 0 and 21600 seconds."
+        )
+        return
+
+    await ctx.channel.edit(slowmode_delay=seconds)
+
+    await ctx.send(
+        f"🐌 Slowmode set to `{seconds}` seconds."
+    )
+
+
+# =========================================================
+# 24. ROLE
+# =========================================================
+
+@bot.command()
+async def role(ctx, member: discord.Member, role: discord.Role):
+    if not await access_check(ctx):
+        return
+
+    await member.add_roles(role)
+
+    await ctx.send(
+        f"🎭 Added {role.mention} to {member.mention}."
+    )
+
+
+# =========================================================
+# 25. REMOVEROLE
+# =========================================================
+
+@bot.command()
+async def removerole(
+    ctx,
+    member: discord.Member,
+    role: discord.Role
+):
+    if not await access_check(ctx):
+        return
+
+    await member.remove_roles(role)
+
+    await ctx.send(
+        f"🎭 Removed {role.mention} from {member.mention}."
+    )
+
+
+# =========================================================
+# 26. CREATEROLЕ
+# =========================================================
+
+@bot.command()
+async def createrole(ctx, *, name):
+    if not await access_check(ctx):
+        return
+
+    role = await ctx.guild.create_role(name=name)
+
+    await ctx.send(
+        f"✅ Created role {role.mention}."
+    )
+
+
+# =========================================================
+# 27. DELETEROLE
+# =========================================================
+
+@bot.command()
+async def deleterole(ctx, role: discord.Role):
+    if not await access_check(ctx):
+        return
+
+    await role.delete()
+
+    await ctx.send("🗑️ Role deleted.")
+
+
+# =========================================================
+# 28. RENAMECHANNEL
+# =========================================================
+
+@bot.command()
+async def renamechannel(ctx, *, name):
+    if not await access_check(ctx):
+        return
+
+    await ctx.channel.edit(name=name)
+
+    await ctx.send(
+        f"✅ Channel renamed to `{name}`."
+    )
+
+
+# =========================================================
+# 29. CREATECHANNEL
+# =========================================================
+
+@bot.command()
+async def createchannel(ctx, *, name):
+    if not await access_check(ctx):
+        return
+
+    channel = await ctx.guild.create_text_channel(name)
+
+    await ctx.send(
+        f"✅ Created {channel.mention}."
+    )
+
+
+# =========================================================
+# 30. DELETECHANNEL
+# =========================================================
+
+@bot.command()
+async def deletechannel(ctx):
+    if not await access_check(ctx):
+        return
+
+    await ctx.send("🗑️ Deleting channel...")
+
+    await ctx.channel.delete()
+
+
+# =========================================================
+# 31. COINFLIP
+# =========================================================
+
+@bot.command()
+async def coinflip(ctx):
+    if not await access_check(ctx):
+        return
+
+    await ctx.send(
+        f"🪙 **{random.choice(['Heads', 'Tails'])}**"
+    )
+
+
+# =========================================================
+# 32. ROLL
+# =========================================================
+
+@bot.command()
+async def roll(ctx, sides: int = 6):
+    if not await access_check(ctx):
+        return
+
+    if sides < 2 or sides > 1000:
+        await ctx.send("❌ Sides must be between 2 and 1000.")
+        return
+
+    await ctx.send(
+        f"🎲 You rolled **{random.randint(1, sides)}**"
+    )
+
+
+# =========================================================
+# 33. 8BALL
+# =========================================================
+
+@bot.command(name="8ball")
+async def eightball(ctx, *, question):
+    if not await access_check(ctx):
+        return
+
+    answers = [
+        "Yes.",
+        "No.",
+        "Definitely.",
+        "Probably.",
+        "Maybe.",
+        "Ask again later.",
+        "Absolutely not.",
+        "Without a doubt."
+    ]
+
+    await ctx.send(
+        f"🎱 **{random.choice(answers)}**"
+    )
+
+
+# =========================================================
+# 34. CHOOSE
+# =========================================================
+
+@bot.command()
+async def choose(ctx, *, choices):
+    if not await access_check(ctx):
+        return
+
+    options = [
+        x.strip()
+        for x in choices.split("|")
+        if x.strip()
+    ]
+
+    if len(options) < 2:
+        await ctx.send(
+            "❌ Separate choices using `|`."
+        )
+        return
+
+    await ctx.send(
+        f"🎯 I choose **{random.choice(options)}**"
+    )
+
+
+# =========================================================
+# 35. RANDOMNUMBER
+# =========================================================
+
+@bot.command()
+async def randomnumber(ctx, minimum: int = 1, maximum: int = 100):
+    if not await access_check(ctx):
+        return
+
+    if minimum > maximum:
+        minimum, maximum = maximum, minimum
+
+    await ctx.send(
+        f"🎲 **{random.randint(minimum, maximum)}**"
+    )
+
+
+# =========================================================
+# 36. JOKE
+# =======================================================
